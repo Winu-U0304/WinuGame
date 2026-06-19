@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>氷上のウィーヌの大冒険</title>
+    <title>氷上の大冒険</title>
     <style>
         body {
             text-align: center;
@@ -14,6 +14,45 @@
             touch-action: none;
         }
         h1 { color: #006064; font-size: 24px; margin: 10px 0; }
+        .screen { display: none; }
+        .active { display: block; }
+        
+        .panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            max-width: 320px;
+            margin: 20px auto;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        input[type="text"], input[type="number"] {
+            width: 80%;
+            padding: 8px;
+            margin: 10px 0;
+            border: 2px solid #b2ebf2;
+            border-radius: 5px;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        button {
+            font-size: 16px;
+            padding: 10px 20px;
+            margin: 5px;
+            background-color: #0288d1;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: 0.2s;
+        }
+        button:hover { background-color: #0277bd; }
+        .btn-secondary { background-color: #009688; }
+        .btn-secondary:hover { background-color: #00796b; }
+        .btn-danger { background-color: #ff5252; }
+
         #info {
             font-size: 18px;
             margin-bottom: 10px;
@@ -26,26 +65,63 @@
             max-width: 100%;
             height: auto;
         }
-        #startBtn {
-            font-size: 18px;
-            padding: 12px 24px;
-            background-color: #0288d1;
-            color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            margin-top: 15px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { font-size: 14px; font-weight: bold; color: #006064;}
     </style>
 </head>
 <body>
 
-    <h1>❄️ 氷上のウィーヌの大冒険 ❄️</h1>
-    <div id="info">スコア: <span id="score">0</span> | 残り時間: <span id="timer">20</span>秒</div>
-    <canvas id="gameCanvas" width="360" height="360"></canvas>
-    <br>
-    <button id="startBtn" onclick="startGame()">ゲームスタート</button>
+    <h1>❄️ 氷上の大冒険 ❄️</h1>
+
+    <!-- タイトル画面 -->
+    <div id="titleScreen" class="screen active panel">
+        <h2>プレイヤー情報</h2>
+        <input type="text" id="playerNameInput" value="ウィーヌ" placeholder="名前を入力">
+        <br><br>
+        <button onclick="startGame()">ゲームスタート</button>
+        <br><br>
+        <button class="btn-secondary" onclick="showScreen('createModeScreen')">作るモード（設定）</button>
+        <button class="btn-secondary" onclick="showScreen('settingsScreen')">背景画像変更</button>
+    </div>
+
+    <!-- 作るモード（カスタマイズ）画面 -->
+    <div id="createModeScreen" class="screen panel">
+        <h2>作るモード</h2>
+        <div class="form-group">
+            <label>制限時間 (秒):</label>
+            <input type="number" id="timeSetting" value="20" min="5" max="300">
+        </div>
+        <div class="form-group">
+            <label>コインの数:</label>
+            <input type="number" id="coinSetting" value="1" min="1" max="50">
+        </div>
+        <div class="form-group">
+            <label>障害物の数:</label>
+            <input type="number" id="obstacleSetting" value="0" min="0" max="20">
+        </div>
+        <button onclick="showScreen('titleScreen')">保存して戻る</button>
+    </div>
+
+    <!-- 設定画面 -->
+    <div id="settingsScreen" class="screen panel">
+        <h2>背景画像の設定</h2>
+        <p style="font-size: 14px; color: #666;">好きな画像を背景にできます</p>
+        <input type="file" id="bgInput" accept="image/*">
+        <br><br>
+        <button class="btn-danger" onclick="clearBackground()">画像をリセット</button>
+        <button onclick="showScreen('titleScreen')">戻る</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="gameScreen" class="screen">
+        <div id="info">スコア: <span id="score">0</span> | 残り時間: <span id="timer">20</span>秒</div>
+        <canvas id="gameCanvas" width="360" height="360"></canvas>
+        <br>
+        <div id="resultControls" style="display: none; margin-top: 15px;">
+            <button onclick="downloadResult()">結果を画像で保存</button>
+            <button class="btn-secondary" onclick="resetToTitle()">タイトルへ戻る</button>
+        </div>
+    </div>
 
     <script>
         const canvas = document.getElementById("gameCanvas");
@@ -53,36 +129,65 @@
         const scoreDisplay = document.getElementById("score");
         const timerDisplay = document.getElementById("timer");
 
-        // ゲームデータ
+        // ゲームシステムデータ
+        let gameConfig = {
+            playerName: "ウィーヌ",
+            timeLimit: 20,
+            coinMax: 1,
+            obstacleCount: 0
+        };
+
+        // 背景画像データ
+        let bgImage = new Image();
+        let hasBg = false;
+
+        // キャラクター・オブジェクトデータ
         let player = { x: 180, y: 180, vx: 0, vy: 0, size: 20, speed: 0.4, friction: 0.97 };
-        let coin = { x: 0, y: 0, size: 12 };
+        let coins = [];
+        let obstacles = [];
         let score = 0;
         let timeLeft = 20;
         let isPlaying = false;
         let gameInterval, timerInterval;
 
-        // キーボード入力の状態を記録するオブジェクト
+        // 入力系
         let keys = {};
-
-        // スマホ・マウス用の変数
         let targetX = null;
         let targetY = null;
         let isTouching = false;
 
-        // キーボードイベントの登録（WASDと矢印に対応）
-        window.addEventListener("keydown", (e) => {
-            // 小文字でも大文字でも動くように「toLowerCase()」を通します
-            keys[e.key.toLowerCase()] = true;
-        });
-        window.addEventListener("keyup", (e) => {
-            keys[e.key.toLowerCase()] = false;
+        // 画面切り替え関数
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        }
+
+        // 背景画像の読み込み処理
+        document.getElementById('bgInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    bgImage.src = event.target.result;
+                    hasBg = true;
+                };
+                reader.readAsDataURL(file);
+            }
         });
 
-        // タッチ＆マウスイベントの登録
+        function clearBackground() {
+            hasBg = false;
+            document.getElementById('bgInput').value = "";
+            alert("背景画像をリセットしました。");
+        }
+
+        // キーボード＆マウス・タッチイベント
+        window.addEventListener("keydown", (e) => { keys[e.key.toLowerCase()] = true; });
+        window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
         canvas.addEventListener("touchstart", (e) => { handleStart(e.touches[0]); e.preventDefault(); }, {passive: false});
         canvas.addEventListener("touchmove", (e) => { handleMove(e.touches[0]); e.preventDefault(); }, {passive: false});
         canvas.addEventListener("touchend", () => { isTouching = false; });
-
         canvas.addEventListener("mousedown", (e) => { handleStart(e); isTouching = true; });
         canvas.addEventListener("mousemove", (e) => { if(isTouching) handleMove(e); });
         canvas.addEventListener("mouseup", () => { isTouching = false; });
@@ -100,23 +205,53 @@
             targetY = (e.clientY - rect.top) * (canvas.height / rect.height);
         }
 
-        function spawnCoin() {
-            coin.x = Math.random() * (canvas.width - coin.size * 2) + coin.size;
-            coin.y = Math.random() * (canvas.height - coin.size * 2) + coin.size;
+        // オブジェクトの生成
+        function createCoin() {
+            return {
+                x: Math.random() * (canvas.width - 24) + 12,
+                y: Math.random() * (canvas.height - 24) + 12,
+                size: 12
+            };
         }
 
+        function initObstacles() {
+            obstacles = [];
+            for (let i = 0; i < gameConfig.obstacleCount; i++) {
+                obstacles.push({
+                    x: Math.random() * (canvas.width - 60) + 30,
+                    y: Math.random() * (canvas.height - 60) + 30,
+                    size: Math.random() * 10 + 15
+                });
+            }
+        }
+
+        // ゲームスタート
         function startGame() {
+            // 設定を読み込む
+            gameConfig.playerName = document.getElementById("playerNameInput").value || "名無し";
+            gameConfig.timeLimit = parseInt(document.getElementById("timeSetting").value) || 20;
+            gameConfig.coinMax = parseInt(document.getElementById("coinSetting").value) || 1;
+            gameConfig.obstacleCount = parseInt(document.getElementById("obstacleSetting").value) || 0;
+
+            showScreen('gameScreen');
+            document.getElementById('resultControls').style.display = 'none';
+
             if (isPlaying) return;
             isPlaying = true;
             score = 0;
-            timeLeft = 20;
+            timeLeft = gameConfig.timeLimit;
+            
             player.x = 180; player.y = 180;
             player.vx = 0;  player.vy = 0;
             isTouching = false;
-            keys = {}; // キー入力をリセット
+            keys = {};
+
             scoreDisplay.innerText = score;
             timerDisplay.innerText = timeLeft;
-            spawnCoin();
+
+            coins = [];
+            for(let i=0; i < gameConfig.coinMax; i++) coins.push(createCoin());
+            initObstacles();
 
             gameInterval = setInterval(update, 1000 / 60);
             timerInterval = setInterval(countdown, 1000);
@@ -128,78 +263,42 @@
             if (timeLeft <= 0) endGame();
         }
 
-        function endGame() {
-            isPlaying = false;
-            clearInterval(gameInterval);
-            clearInterval(timerInterval);
-            ctx.fillStyle = "rgba(0, 96, 100, 0.8)";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = "white";
-            ctx.font = "bold 22px sans-serif";
-            ctx.textAlign = "center";
-            ctx.fillText("タイムアップ！", canvas.width/2, 160);
-            ctx.fillText(`ウィーヌのスコア: ${score}点`, canvas.width/2, 210);
-        }
-
-        function update() {
-            // 【変更点】キーボード操作（WASD または 矢印キーでじわじわ加速）
-            if (keys["w"] || keys["arrowup"]) { player.vy -= player.speed; }
-            if (keys["s"] || keys["arrowdown"]) { player.vy += player.speed; }
-            if (keys["a"] || keys["arrowleft"]) { player.vx -= player.speed; }
-            if (keys["d"] || keys["arrowright"]) { player.vx += player.speed; }
-
-            // スマホのタップ操作（タップ中のみ加速）
-            if (isTouching && targetX !== null && targetY !== null) {
-                let dx = targetX - player.x;
-                let dy = targetY - player.y;
-                let dist = Math.hypot(dx, dy);
-                if (dist > 5) {
-                    player.vx += (dx / dist) * player.speed;
-                    player.vy += (dy / dist) * player.speed;
-                }
+        // 描画処理の共通化
+        function drawScene() {
+            // 背景
+            if (hasBg) {
+                ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+            } else {
+                ctx.fillStyle = "#e1f5fe";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                // ひび割れ模様
+                ctx.strokeStyle = "rgba(255,255,255,0.8)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(50, 80); ctx.lineTo(120, 140); ctx.lineTo(100, 200);
+                ctx.moveTo(300, 250); ctx.lineTo(250, 280);
+                ctx.stroke();
             }
 
-            // 摩擦（滑る演出）
-            player.vx *= player.friction;
-            player.vy *= player.friction;
-
-            // 移動反映
-            player.x += player.vx;
-            player.y += player.vy;
-
-            // 壁での跳ね返り
-            if (player.x < player.size) { player.x = player.size; player.vx *= -0.6; }
-            if (player.x > canvas.width - player.size) { player.x = canvas.width - player.size; player.vx *= -0.6; }
-            if (player.y < player.size) { player.y = player.size; player.vy *= -0.6; }
-            if (player.y > canvas.height - player.size) { player.y = canvas.height - player.size; player.vy *= -0.6; }
-
-            // 当たり判定
-            let coinDist = Math.hypot(player.x - coin.x, player.y - coin.y);
-            if (coinDist < player.size + coin.size) {
-                score++;
-                scoreDisplay.innerText = score;
-                spawnCoin();
-            }
-
-            // 描画
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // ひび割れ模様
-            ctx.strokeStyle = "rgba(255,255,255,0.4)";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(50, 80); ctx.lineTo(120, 140); ctx.lineTo(100, 200);
-            ctx.moveTo(300, 250); ctx.lineTo(250, 280);
-            ctx.stroke();
+            // 障害物
+            ctx.fillStyle = "#607d8b";
+            obstacles.forEach(obs => {
+                ctx.beginPath();
+                ctx.arc(obs.x, obs.y, obs.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
 
             // コイン
-            ctx.beginPath();
-            ctx.arc(coin.x, coin.y, coin.size, 0, Math.PI * 2);
             ctx.fillStyle = "#ff9100";
-            ctx.fill();
-            ctx.closePath();
+            coins.forEach(coin => {
+                ctx.beginPath();
+                ctx.arc(coin.x, coin.y, coin.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.closePath();
+            });
 
-            // ウィーヌ
+            // プレイヤー
             ctx.beginPath();
             ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
             ctx.fillStyle = "#00bcd4";
@@ -210,7 +309,109 @@
             ctx.fillStyle = "white";
             ctx.font = "bold 11px sans-serif";
             ctx.textAlign = "center";
-            ctx.fillText("ウィーヌ", player.x, player.y + 4);
+            
+            // 名前の背景を少し暗くして見やすくする
+            let textWidth = ctx.measureText(gameConfig.playerName).width;
+            ctx.fillStyle = "rgba(0,0,0,0.4)";
+            ctx.fillRect(player.x - textWidth/2 - 2, player.y - 4, textWidth + 4, 12);
+            
+            ctx.fillStyle = "white";
+            ctx.fillText(gameConfig.playerName, player.x, player.y + 5);
+        }
+
+        function update() {
+            // 移動処理
+            if (keys["w"] || keys["arrowup"]) { player.vy -= player.speed; }
+            if (keys["s"] || keys["arrowdown"]) { player.vy += player.speed; }
+            if (keys["a"] || keys["arrowleft"]) { player.vx -= player.speed; }
+            if (keys["d"] || keys["arrowright"]) { player.vx += player.speed; }
+
+            if (isTouching && targetX !== null && targetY !== null) {
+                let dx = targetX - player.x;
+                let dy = targetY - player.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist > 5) {
+                    player.vx += (dx / dist) * player.speed;
+                    player.vy += (dy / dist) * player.speed;
+                }
+            }
+
+            player.vx *= player.friction;
+            player.vy *= player.friction;
+            player.x += player.vx;
+            player.y += player.vy;
+
+            // 壁の判定
+            if (player.x < player.size) { player.x = player.size; player.vx *= -0.6; }
+            if (player.x > canvas.width - player.size) { player.x = canvas.width - player.size; player.vx *= -0.6; }
+            if (player.y < player.size) { player.y = player.size; player.vy *= -0.6; }
+            if (player.y > canvas.height - player.size) { player.y = canvas.height - player.size; player.vy *= -0.6; }
+
+            // 障害物の当たり判定（弾く）
+            obstacles.forEach(obs => {
+                let dx = player.x - obs.x;
+                let dy = player.y - obs.y;
+                let dist = Math.hypot(dx, dy);
+                if (dist < player.size + obs.size) {
+                    let angle = Math.atan2(dy, dx);
+                    player.vx = Math.cos(angle) * player.speed * 3;
+                    player.vy = Math.sin(angle) * player.speed * 3;
+                    player.x += player.vx;
+                    player.y += player.vy;
+                }
+            });
+
+            // コインの当たり判定
+            for(let i = coins.length - 1; i >= 0; i--) {
+                let coinDist = Math.hypot(player.x - coins[i].x, player.y - coins[i].y);
+                if (coinDist < player.size + coins[i].size) {
+                    score++;
+                    scoreDisplay.innerText = score;
+                    coins[i] = createCoin(); // 新しいコインを配置
+                }
+            }
+
+            drawScene();
+        }
+
+        function endGame() {
+            isPlaying = false;
+            clearInterval(gameInterval);
+            clearInterval(timerInterval);
+            
+            // リザルト画面の描画
+            drawScene(); // 最後の状態を描画
+            
+            ctx.fillStyle = "rgba(0, 96, 100, 0.8)";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "white";
+            ctx.font = "bold 26px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText("タイムアップ！", canvas.width/2, 140);
+            
+            ctx.font = "bold 20px sans-serif";
+            ctx.fillStyle = "#ffeb3b";
+            ctx.fillText(`${gameConfig.playerName} のスコア`, canvas.width/2, 190);
+            
+            ctx.font = "bold 36px sans-serif";
+            ctx.fillStyle = "white";
+            ctx.fillText(`${score} 点`, canvas.width/2, 240);
+
+            // ボタンを表示
+            document.getElementById('resultControls').style.display = 'block';
+        }
+
+        // 画像として保存する機能
+        function downloadResult() {
+            const link = document.createElement('a');
+            link.download = `${gameConfig.playerName}_スコア_${score}点.png`;
+            link.href = canvas.toDataURL("image/png");
+            link.click();
+        }
+
+        // タイトルへ戻る
+        function resetToTitle() {
+            showScreen('titleScreen');
         }
     </script>
 </body>
